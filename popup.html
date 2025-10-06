@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Lecture Co-Pilot</title>
+    <style>
+      body { font: 14px system-ui; min-width: 360px; padding: 16px; }
+      .row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px }
+      button { padding:8px 10px; border:1px solid #ccc; border-radius:10px; cursor:pointer }
+      pre { white-space:pre-wrap; word-break:break-word; background:#fafafa; border:1px solid #eee; padding:10px; border-radius:8px; max-height:320px; overflow:auto }
+      select { padding:6px }
+      small { color:#666 }
+    </style>
+  </head>
+  <body>
+    <h3 style="margin:0 0 8px">Lecture Co-Pilot</h3>
+
+    <div class="row">
+      <button id="read">Read page</button>
+      <button id="summarize">Summarize</button>
+      <button id="outline">Outline</button>
+      <button id="make-json">Objectives/Quiz (Prompt)</button>
+    </div>
+
+    <div class="row">
+      <select id="sumType">
+        <option value="key-points">key-points</option>
+        <option value="tldr">tldr</option>
+        <option value="teaser">teaser</option>
+        <option value="headline">headline</option>
+      </select>
+      <select id="sumLength">
+        <option value="short">short</option>
+        <option value="medium" selected>medium</option>
+        <option value="long">long</option>
+      </select>
+      <select id="sumFormat">
+        <option value="markdown" selected>markdown</option>
+        <option value="plain-text">plain-text</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <button id="detect">Detect Lang</button>
+      <select id="targetLang">
+        <option value="es">es</option>
+        <option value="fr">fr</option>
+        <option value="de">de</option>
+        <option value="hi">hi</option>
+        <option value="zh">zh</option>
+      </select>
+      <button id="translate">Translate</button>
+      <button id="proofread">Proofread</button>
+    </div>
+
+    <pre id="out"></pre>
+    <small id="note"></small>
+
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>
