@@ -46,7 +46,7 @@ This repository contains a Chrome Manifest V3 extension named `Lecture Co-Pilot`
 - Small fixes, feature additions, or tests are welcome. If you want, tell me what feature to add next (examples: keyboard shortcuts, context menu, options page, or CI packaging).
 
 ## License
-This project does not include an explicit license file. If you want an open license, common choices are MIT or Apache 2.0 - tell me which you'd like and I can add it.
+This project is released under the MIT License — see the `LICENSE` file for details.
 
 If you'd like, I can also:
 - Add a `package.json` and build scripts (if you plan to use bundlers like Vite/webpack).
