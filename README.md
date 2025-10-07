@@ -52,5 +52,4 @@ If you'd like, I can also:
 - Add a `package.json` and build scripts (if you plan to use bundlers like Vite/webpack).
 - Add a small test harness or a basic developer script for reloading the extension from the command line.
 
----
-_Created automatically — tell me if you want the README shortened, expanded, or tuned for publishing to the Chrome Web Store._
+
