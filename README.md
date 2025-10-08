@@ -48,7 +48,7 @@ Before installing, make sure you have:
 ### Step 1: Download the Extension
 1. Download this repository as a ZIP file or clone it:
    ```bash
-   git clone https://github.com/yourusername/lecture-copilot.git
+   git clone https://github.com/haider213/lecture-copilot.git
    ```
 2. If downloaded as ZIP, extract it to a folder on your computer
 
