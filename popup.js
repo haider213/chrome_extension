@@ -60,15 +60,24 @@ async function readText() {
 // Lengths: 'short' | 'medium' | 'long'; Formats: 'markdown' | 'plain-text'
 async function summarizeWithBuiltInAI(text, { type, length, format }) {
   if (!("Summarizer" in self)) throw new Error("Summarizer API not supported in this Chrome.");
+  
   const avail = await Summarizer.availability();
-  if (avail === "unavailable") throw new Error("Summarizer model unavailable on this device.");
+  if (avail === "no") {
+    throw new Error("Summarizer model is not available on this device.");
+  }
+  
+  if (avail === "after-download") {
+    tip("Summarizer model will be downloaded...");
+  }
 
   const summarizer = await Summarizer.create({
     sharedContext: "This is web page text for teaching.",
-    type, length, format,
+    type, 
+    length, 
+    format,
     monitor(m) {
       m.addEventListener("downloadprogress", (e) => {
-        tip(`Downloading model… ${Math.round(e.loaded * 100)}%`);
+        tip(`Downloading summarizer model… ${Math.round(e.loaded * 100)}%`);
       });
     }
   });
@@ -80,28 +89,102 @@ async function summarizeWithBuiltInAI(text, { type, length, format }) {
 }
 
 // ---- Prompt API (Extensions) — structured JSON  ──────────────────────
-// Requires origin-trial token in manifest. We'll feature-detect.
 async function promptForTeachingJSON(text) {
-  if (!("LanguageModel" in self)) throw new Error("Prompt API not supported or origin trial missing.");
-  const availability = await LanguageModel.availability?.();
-  if (availability === "unavailable") throw new Error("Language model unavailable.");
+  // 0) Check multiple ways the API might be available
+  const hasLanguageModel = 'LanguageModel' in self;
+  const hasAI = 'ai' in self && self.ai?.languageModel;
+  const hasChrome = chrome?.aiOriginTrial?.languageModel;
+  
+  if (!hasLanguageModel && !hasAI && !hasChrome) {
+    throw new Error(
+      'Prompt API not available. Please:\n' +
+      '1. Use Chrome 128+\n' +
+      '2. Enable chrome://flags/#prompt-api-for-gemini-nano\n' +
+      '3. Enable chrome://flags/#optimization-guide-on-device-model\n' +
+      '4. Download model at chrome://components'
+    );
+  }
 
-  const session = await LanguageModel.create({
-    initialPrompts: [{
-      role: "system",
-      content:
-        "You are Lecture Co-Pilot. Given page text, return compact JSON only:\n" +
-        "{ objectives: string[], outline: string[], notes: string[], quiz: { mcq: {q:string, a:string[], correct:number}[], short: {q:string}[] } }"
-    }]
-  });
+  // Try different API access methods
+  let LanguageModelAPI;
+  if (hasLanguageModel) {
+    LanguageModelAPI = self.LanguageModel;
+  } else if (hasAI) {
+    LanguageModelAPI = self.ai.languageModel;
+  } else if (hasChrome) {
+    LanguageModelAPI = chrome.aiOriginTrial.languageModel;
+  }
 
+  // 1) Decide languages - outputs must be 'en' | 'es' | 'ja'
+  const inLangs  = ['en'];
+  const outLangs = ['en'];
+
+  // 2) Check availability with the SAME options you'll pass to create()
+  let availability;
+  try {
+    availability = await LanguageModelAPI.capabilities();
+    if (!availability || availability.available === 'no') {
+      throw new Error('Language model unavailable. Check chrome://components for "Optimization Guide On Device Model"');
+    }
+  } catch (err) {
+    // Fallback to old API
+    availability = await LanguageModelAPI.availability({
+      expectedInputs:  [{ type: 'text', languages: inLangs }],
+      expectedOutputs: [{ type: 'text', languages: outLangs }]
+    });
+    
+    if (availability === 'no') {
+      throw new Error('Language model unavailable for chosen languages.');
+    }
+  }
+  
+  if (availability === 'after-download' || availability.available === 'after-download') {
+    tip('Language model will be downloaded...');
+  }
+
+  // 3) Create session - try new API first, then fallback
+  let session;
+  try {
+    // New API (Chrome 128+)
+    session = await LanguageModelAPI.create({
+      systemPrompt: 'You are Lecture Co-Pilot. Return JSON ONLY matching this schema. No prose, no markdown, just valid JSON:\n' +
+                   '{ "objectives": ["string"], "outline": ["string"], "notes": ["string"], "quiz": { "mcq": [{"q":"string", "a":["string"], "correct":0}], "short": [{"q":"string"}] } }'
+    });
+  } catch (err) {
+    // Fallback to old API with initialPrompts
+    session = await LanguageModelAPI.create({
+      expectedInputs:  [{ type: 'text', languages: inLangs }],
+      expectedOutputs: [{ type: 'text', languages: outLangs }],
+      initialPrompts: [{
+        role: 'system',
+        content: 'You are Lecture Co-Pilot. Return JSON ONLY matching this schema. No prose, no markdown, just valid JSON:\n' +
+                 '{ "objectives": ["string"], "outline": ["string"], "notes": ["string"], "quiz": { "mcq": [{"q":"string", "a":["string"], "correct":0}], "short": [{"q":"string"}] } }'
+      }],
+      monitor(m) {
+        m.addEventListener('downloadprogress', (e) => {
+          tip(`Downloading language model… ${Math.round(e.loaded * 100)}%`);
+        });
+      }
+    });
+  }
+
+  // 4) Define the JSON schema for structured output
   const schema = {
     type: "object",
     required: ["objectives", "outline", "notes", "quiz"],
     properties: {
-      objectives: { type: "array", items: { type: "string" } },
-      outline: { type: "array", items: { type: "string" } },
-      notes: { type: "array", items: { type: "string" } },
+      objectives: { 
+        type: "array", 
+        items: { type: "string" } 
+      },
+      outline: { 
+        type: "array", 
+        items: { type: "string" } 
+      },
+      notes: { 
+        type: "array", 
+        items: { type: "string" } 
+      },
       quiz: {
         type: "object",
         required: ["mcq", "short"],
@@ -113,25 +196,68 @@ async function promptForTeachingJSON(text) {
               required: ["q", "a", "correct"],
               properties: {
                 q: { type: "string" },
-                a: { type: "array", items: { type: "string" }, minItems: 2 },
-                correct: { type: "integer", minimum: 0 }
+                a: { 
+                  type: "array", 
+                  items: { type: "string" }, 
+                  minItems: 2 
+                },
+                correct: { 
+                  type: "integer", 
+                  minimum: 0 
+                }
               }
             }
           },
           short: {
             type: "array",
-            items: { type: "object", required: ["q"], properties: { q: { type: "string" } } }
+            items: { 
+              type: "object", 
+              required: ["q"], 
+              properties: { 
+                q: { type: "string" } 
+              } 
+            }
           }
         }
       }
     }
   };
 
-  const { response } = await session.prompt({
-    messages: [{ role: "user", content: `Page text:\n${text}\nReturn JSON only.` }],
-    responseConstraint: { type: "json_schema", value: schema }
-  });
-  return JSON.parse(response);
+  // 5) Prompt with structured output
+  let result;
+  try {
+    // Try with responseConstraint (newer API)
+    result = await session.prompt(
+      `Create educational objectives, outline, notes, and quiz from this page text:\n\n${text}`,
+      {
+        responseConstraint: { type: 'json_schema', value: schema }
+      }
+    );
+  } catch (err) {
+    // Fallback: prompt without constraint, extract JSON manually
+    result = await session.prompt(
+      `Create educational objectives, outline, notes, and quiz from this page text. Return ONLY valid JSON matching this exact structure:\n` +
+      `{ "objectives": ["string"], "outline": ["string"], "notes": ["string"], "quiz": { "mcq": [{"q":"string", "a":["option1","option2"], "correct":0}], "short": [{"q":"string"}] } }\n\n` +
+      `Page text:\n${text}`
+    );
+  }
+  
+  session.destroy();
+  tip('');
+  
+  if (!result) {
+    throw new Error("No response from language model");
+  }
+  
+  // Extract JSON if wrapped in markdown
+  let jsonText = result.trim();
+  const jsonMatch = jsonText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+  if (jsonMatch) {
+    jsonText = jsonMatch[1];
+  }
+  
+  // Parse and return JSON
+  return JSON.parse(jsonText);
 }
 
 // ---- Translator + Language Detector  ─────────────────────────────────

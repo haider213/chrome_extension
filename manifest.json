@@ -5,7 +5,7 @@
   "description": "Turn any webpage into objectives, outline, notes, quizzes — on-device with Chrome built-in AI.",
   "action": { "default_popup": "popup.html" },
   "background": { "service_worker": "service_worker.js" },
-  "permissions": ["activeTab", "scripting", "storage", "offscreen"],
+  "permissions": ["activeTab", "scripting", "storage", "offscreen", "sidePanel"],
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
@@ -20,7 +20,6 @@
     "128": "icons/icon128.png"
   },
   "trial_tokens": [
-    "PASTE_PROMPT_API_EXTENSION_TOKEN_IF_ANY",
-    "PASTE_PROOFREADER_API_EXTENSION_TOKEN_IF_ANY"
+    "AzCbFsYZcNQjLkK1NcmrSk+HhbWTgv5PAwQXy4Gmmdtn5Mn9shP3fh4AvNiLbqZvnMlQY+728PoptQiZHZHkUw0AAACPeyJvcmlnaW4iOiJjaHJvbWUtZXh0ZW5zaW9uOi8vZ2hqYnBnaW1qcGxta21jZW5hbmtmZGZuaGtpZ25pZ2QiLCJmZWF0dXJlIjoiQUlQcm9tcHRBUElNdWx0aW1vZGFsSW5wdXQiLCJleHBpcnkiOjE3NzQzMTA0MDAsImlzVGhpcmRQYXJ0eSI6dHJ1ZX0="
   ]
 }
