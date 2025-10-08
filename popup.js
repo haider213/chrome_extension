@@ -58,22 +58,24 @@ async function readText() {
 // Docs: availability() -> create({ monitor }) -> summarize()
 // Types: 'key-points' | 'tldr' | 'teaser' | 'headline'
 // Lengths: 'short' | 'medium' | 'long'; Formats: 'markdown' | 'plain-text'
+function getOutputLanguage() {
+  const v = document.getElementById('outLang')?.value?.toLowerCase?.() || 'en';
+  return ['en','es','ja'].includes(v) ? v : 'en';
+}
+
 async function summarizeWithBuiltInAI(text, { type, length, format }) {
   if (!("Summarizer" in self)) throw new Error("Summarizer API not supported in this Chrome.");
-  
+
   const avail = await Summarizer.availability();
-  if (avail === "no") {
-    throw new Error("Summarizer model is not available on this device.");
-  }
-  
-  if (avail === "after-download") {
-    tip("Summarizer model will be downloaded...");
-  }
+  if (avail === "no") throw new Error("Summarizer model is not available on this device.");
+  if (avail === "after-download") tip("Summarizer model will be downloaded...");
+
+  const lang = getOutputLanguage();
 
   const summarizer = await Summarizer.create({
     sharedContext: "This is web page text for teaching.",
-    type, 
-    length, 
+    type,
+    length,
     format,
     monitor(m) {
       m.addEventListener("downloadprogress", (e) => {
@@ -82,9 +84,13 @@ async function summarizeWithBuiltInAI(text, { type, length, format }) {
     }
   });
 
-  const out = await summarizer.summarize(text);
-  summarizer.destroy();
-  tip("");
+  let out;
+  try {
+    out = await summarizer.summarize(text, { outputLanguage: lang });
+  } finally {
+    summarizer.destroy();
+    tip("");
+  }
   return out;
 }
 
@@ -162,7 +168,7 @@ async function promptForTeachingJSON(text) {
       }],
       monitor(m) {
         m.addEventListener('downloadprogress', (e) => {
-          tip(`Downloading language model… ${Math.round(e.loaded * 100)}%`);
+          tip(`Downloading language model… ${Math.round(e.loaded*100)}%`);
         });
       }
     });
@@ -298,6 +304,76 @@ async function proofreadText(text) {
   return `✅ Corrected (${count} changes):\n\n${corrected}`;
 }
 
+// ---- Teaching JSON -> Markdown formatter and copy helper  ────────────
+function toTeacherMarkdown(data, opts = {}) {
+  const title = (opts.title || 'Lesson Plan').trim();
+
+  const esc = (s) => String(s ?? '').toString().trim();
+  const arr = (v) => Array.isArray(v) ? v : (v ? [v] : []);
+  const bullets = (items) => arr(items).filter(Boolean).map(i => `- ${esc(i)}`).join('\n');
+  const numbers = (items) => arr(items).filter(Boolean).map((i, idx) => `${idx + 1}) ${esc(i)}`).join('\n');
+
+  // MCQ formatting
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const mcqLines = arr(data?.quiz?.mcq).map((qObj, qi) => {
+    const q = esc(qObj?.q);
+    const answers = arr(qObj?.a).map((a, i) => `   ${letters[i]}) ${esc(a)}`).join('\n');
+    // Handle either index (number) or text (string) for 'correct'
+    let correctLabel = '';
+    if (typeof qObj?.correct === 'number') {
+      correctLabel = letters[qObj.correct] || '';
+    } else if (typeof qObj?.correct === 'string') {
+      const idx = arr(qObj.a).findIndex(x => String(x).trim().toLowerCase() === String(qObj.correct).trim().toLowerCase());
+      correctLabel = idx >= 0 ? letters[idx] : qObj.correct;
+    }
+    const answerLine = correctLabel ? `Answer: ${correctLabel}` : '';
+    return [`${qi + 1}. ${q}`, answers, answerLine].filter(Boolean).join('\n');
+  }).join('\n\n');
+
+  // Short answers formatting
+  const shortLines = arr(data?.quiz?.short).map((qObj, qi) => {
+    const q = esc(qObj?.q);
+    const ans = qObj?.correct ? `Answer: ${esc(qObj.correct)}` : '';
+    return [`${qi + 1}. ${q}`, ans].filter(Boolean).join('\n');
+  }).join('\n\n');
+
+  return [
+    `Lesson Plan: ${title}`,
+    '',
+    'Learning Objectives',
+    bullets(data?.objectives),
+    '',
+    'Outline',
+    numbers(data?.outline),
+    '',
+    'Instructor Notes',
+    bullets(data?.notes),
+    '',
+    'Quiz — Multiple Choice',
+    mcqLines || '- (none)',
+    '',
+    'Quiz — Short Answer',
+    shortLines || '- (none)'
+  ].join('\n');
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    tip('Copied to clipboard');
+  } catch (_) {
+    // Fallback for environments without clipboard permission
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); tip('Copied to clipboard'); } catch {}
+    document.body.removeChild(ta);
+  }
+}
+
 // ─── UI handlers ──────────────────────────────────────────────────────
 btnRead.addEventListener("click", async () => {
   try {
@@ -335,7 +411,11 @@ btnJSON.addEventListener("click", async () => {
     const text = await readText();
     if (!text) return show("No text.");
     const json = await promptForTeachingJSON(text);
-    show(json);
+
+    // Render markdown for teachers and copy it
+    const md = toTeacherMarkdown(json, { title: document.title || 'Webpage' });
+    show(md);
+    await copyToClipboard(md);
   } catch (e) { show(`Prompt failed: ${e?.message || e}`); }
 });
 
